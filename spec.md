@@ -1,69 +1,96 @@
-# Spec: Linux Partitie Analyse en Rapportage Applicatie
+Spec: Intelligente Linux Partitie Analyse Applicatie met AI
+1. Doel van de Applicatie
+Het doel is om een command-line applicatie (CLI) te ontwikkelen die een diepgaande en begrijpelijke analyse van de gebruiker's Linux-partitie uitvoert. De applicatie verzamelt systeeminformatie en gebruikt vervolgens een Generative AI model (Google Gemini) om deze ruwe data te vertalen naar duidelijke, gegroepeerde en bruikbare inzichten. Het eindresultaat is een rapport dat niet alleen toont wat er is geïnstalleerd, maar ook waarom en hoe het met elkaar in verband staat.
+2. Functionele Vereisten
+2.1. Fase 1: Lokale Dataverzameling
+Het script moet eerst lokaal, zonder AI, de volgende informatie verzamelen:
+Pakketlijsten:
+Genereer een lijst van alle geïnstalleerde apt-pakketten met hun grootte.
+Maak een apart onderscheid tussen pakketten die "handmatig" zijn geïnstalleerd en pakketten die "automatisch" als afhankelijkheid zijn geïnstalleerd.
+Commando: apt-mark showmanual
+Commando: apt-mark showauto
+Verzamel de officiële beschrijving van elk belangrijk pakket.
+Commando: apt-cache show <pakketnaam>
+node_modules Analyse:
+Vind alle node_modules mappen, hun locaties en hun respectievelijke groottes.
+Bereken de totale ingenomen ruimte.
+2.2. Fase 2: AI-Gedreven Analyse en Interpretatie
+De verzamelde data uit Fase 1 wordt als context naar de Gemini API gestuurd. Het script moet de AI de volgende taken laten uitvoeren:
+Categorisatie van Pakketten:
+Input: De showmanual en showauto lijsten.
+Taak: Vraag de AI om de showmanual-lijst te analyseren en op te splitsen in twee duidelijke categorieën:
+Kernsysteem & Essentiële Tools: Pakketten die deel uitmaken van de Debian basisinstallatie (bash, coreutils, apt, etc.).
+Door de Gebruiker Geïnstalleerde Applicaties: De software die de gebruiker waarschijnlijk zelf bewust heeft toegevoegd (code, docker-ce, nodejs, gh, etc.).
+Resultaat: Een schone lijst van software die de gebruiker zelf heeft geïnstalleerd.
+Groeperen en Uitleggen van Relaties:
+Input: De volledige pakketlijst.
+Taak: Vraag de AI om functionele groepen te identificeren en de relatie uit te leggen.
+Voorbeelden:
+"Groeper alle docker-* pakketten en leg uit waarom containerd.io ook deel uitmaakt van de Docker-ecosysteem, ook al heeft het een andere naam."
+"Identificeer alle Java-gerelateerde pakketten (zoals openjdk-*) en leg hun functie uit."
+Verklaren van Cryptische Pakketten:
+Input: Een selectie van de grootste of meest onduidelijke bibliotheek-pakketten (bv. libllvm15, libgl1-mesa-dri, libicu72).
+Taak: Vraag de AI: "Leg in eenvoudige termen uit wat de functie is van pakket X en waarom het waarschijnlijk op een ontwikkelomgeving is geïnstalleerd als afhankelijkheid."
+Genereren van Gepersonaliseerde Aanbevelingen:
+Input: De volledige analyse (grootste pakketten, node_modules omvang, etc.).
+Taak: Vraag de AI om onderhoudstips te genereren die specifiek zijn voor de gevonden situatie.
+Voorbeelden:
+Indien grote node_modules mappen gevonden: "Je hebt meerdere grote node_modules mappen. Overweeg het gebruik van npkill om oude projecten op te ruimen."
+Indien Docker is geïnstalleerd: "Docker images kunnen veel ruimte innemen. Gebruik docker system prune -a om ongebruikte images, containers en volumes op te ruimen."
+2.3. Fase 3: Rapportage
+De applicatie moet de verwerkte en door AI verrijkte informatie samenvoegen tot één duidelijk, leesbaar Markdown-bestand (AI_linux_report.md). De structuur moet intuïtief zijn voor de gebruiker. (Zie voorbeeld output hieronder).
+3. Technologie & Implementatie
+Programmeertaal: Python 3. Dit is ideaal voor het uitvoeren van shell-commando's en het maken van API-aanroepen.
+Systeem Commando's: De applicatie zal gebruik maken van dpkg-query, find, du, apt-mark en apt-cache.
+AI Integratie:
+De applicatie moet de google-generativeai Python library gebruiken.
+Er moet een API-sleutel voor de Gemini API worden gebruikt (de gebruiker moet deze zelf aanleveren, bijvoorbeeld via een omgevingsvariabele).
+Het model gemini-pro-latest of gemini-flash-latest moet worden aangeroepen.
+4. Voorbeeld van de Gewenste Output (AI_linux_report.md)
+code
+Markdown
+# Intelligent Rapport van je Linux Partitie
+*Gegenereerd op: 2025-10-23*
 
-## 1. Doel van de Applicatie
+## 1. Jouw Werkplaats: Zelf Geïnstalleerde Applicaties
 
-De applicatie moet een analyse uitvoeren op de Chrostini Linux-partitie (Debian 12) van de gebruiker. Op basis van deze analyse wordt een gedetailleerd rapport gegenereerd over de geïnstalleerde software, het schijfgebruik van `node_modules` mappen en aanbevelingen voor het onderhoud van de partitie.
+Dit is de software die jij bewust hebt toegevoegd aan het basissysteem.
 
-## 2. Functionele Vereisten
+| Applicatie | Grootte (MB) | Beschrijving |
+|------------|--------------|----------------|
+| Visual Studio Code | 437.72 | Een krachtige code editor van Microsoft. |
+| Docker Engine | 291.66 | Platform voor het bouwen en draaien van applicaties in containers. |
+| OpenJDK 17 | 261.90 | Ontwikkel- en runtime-omgeving voor de programmeertaal Java. |
+| Node.js | 95.21 | JavaScript runtime voor server-side ontwikkeling. |
+| GitHub CLI | 52.83 | Command-line tool voor interactie met GitHub. |
+| ... | ... | ... |
 
-De applicatie moet de volgende drie hoofdfuncties hebben:
+---
 
-### 2.1. Analyse van Geïnstalleerde Softwarepakketten
+## 2. Inzichten van de AI: Hoe Werkt Je Systeem?
 
-De applicatie moet een lijst kunnen genereren van alle geïnstalleerde softwarepakketten. Voor elk pakket moet de volgende informatie worden weergegeven:
+Hieronder legt de AI uit hoe bepaalde onderdelen van je systeem samenwerken en wat hun functie is.
 
-*   **Pakketnaam:** De naam van het softwarepakket.
-*   **Versie:** De geïnstalleerde versie van het pakket.
-*   **Installatiemap(pen):** De mappen waarin de bestanden van het pakket zijn geïnstalleerd.
-*   **Schijfruimte:** De totale schijfruimte die door het pakket in beslag wordt genomen.
+### De Docker Familie: Meer dan je denkt
+Je hebt `docker-ce` geïnstalleerd, maar je ziet ook `containerd.io`. Dit is normaal en correct. Docker is opgesplitst in componenten: `docker-ce` is de 'motor' waarmee jij praat, en deze geeft de opdrachten door aan `containerd.io`, de onderliggende 'runtime' die het zware werk van containerbeheer doet. Ze horen dus onlosmakelijk bij elkaar.
 
-**Commando's voor implementatie:**
+### Wat is `libllvm15`?
+Dit pakket (111.92 MB) is een 'compiler toolkit'. Zie het als een geavanceerde gereedschapskist die andere programma's (zoals je grafische drivers of Java) gebruiken om code om te zetten naar supersnelle machine-instructies. Je hebt het niet zelf geïnstalleerd, maar het is essentieel voor de prestaties van andere software.
 
-*   Om een lijst van geïnstalleerde pakketten met hun grootte te krijgen, kan het volgende commando worden gebruikt:
-    ```bash
-    dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n
-    ```
-*   Om de installatiemappen van een specifiek pakket te vinden:
-    ```bash
-    dpkg -L <pakketnaam>
-    ```
+---
 
-### 2.2. Analyse van `node_modules` Mappen
+## 3. Analyse van `node_modules`
 
-De applicatie moet het hele bestandssysteem van de Linux-partitie doorzoeken naar mappen met de naam `node_modules`. Voor elke gevonden map moet de volgende informatie worden weergegeven:
+- **Totaal ingenomen ruimte:** 1024.19 MB
+- **Grootste map:** `/home/kareltestspecial/.config/nvm/versions/node/v22.20.0/lib/node_modules` (628.99 MB)
+- **Projectmappen:**
+  - `/home/kareltestspecial/_/kanbanpro/frontend/node_modules` (345.02 MB)
+  - `/home/kareltestspecial/_/kanbanpro/node_modules` (47.90 MB)
 
-*   **Locatie:** Het volledige pad naar de `node_modules` map.
-*   **Schijfruimte:** De totale schijfruimte die door de map en de inhoud ervan in beslag wordt genomen.
-*   **Totaal:** Een overzicht van de totale schijfruimte die door alle `node_modules` mappen samen wordt ingenomen.
+---
 
-**Commando voor implementatie:**
+## 4. Gepersonaliseerde Onderhoudstips
 
-*   Een robuust commando om alle `node_modules` mappen te vinden, hun grootte te berekenen en rekening te houden met spaties in paden:
-    ```bash
-    find . -type d -iname node_modules -prune | sed 's/^/"/g' | sed 's/$/"/g' | tr '\n' ' ' | xargs du -chs
-    ```
-
-### 2.3. Aanbevelingen voor Onderhoud
-
-Op basis van de verzamelde gegevens moet de applicatie een lijst met suggesties genereren om de Linux-partitie "gezond" te houden. Deze aanbevelingen moeten gericht zijn op een ontwikkelomgeving en kunnen het volgende omvatten:
-
-*   **Pakketbeheer:**
-    *   Identificeer en suggereer het verwijderen van ongebruikte of verouderde pakketten.
-    *   Adviseer om `sudo apt autoremove` en `sudo apt clean` regelmatig uit te voeren om onnodige afhankelijkheden en de pakketcache te verwijderen.
-*   **`node_modules` Beheer:**
-    *   Markeer grote `node_modules` mappen van oudere projecten als kandidaten voor verwijdering.
-    *   Suggereer het gebruik van tools zoals `npkill` om interactief `node_modules` mappen te beheren en op te ruimen.
-*   **Algemeen Systeemonderhoud:**
-    *   Adviseer het gebruik van versiebeheer (Git) voor projecten en configuratiebestanden.
-    *   Suggereer het gebruik van `virtual environments` voor Python-projecten om afhankelijkheden te isoleren.
-    *   Herinner de gebruiker aan het belang van regelmatige back-ups.
-
-## 3. Niet-functionele Vereisten
-
-*   **Gebruikersinterface:** De applicatie moet een command-line interface (CLI) hebben. De output moet duidelijk en gestructureerd zijn, bijvoorbeeld in de vorm van tabellen of lijsten.
-*   **Platform:** De applicatie moet draaien op een Debian 12 (bookworm) omgeving.
-*   **Technologie:** De applicatie kan worden ontwikkeld in een scripttaal die geschikt is voor dit doel, zoals Bash, Python of Node.js.
-
-## 4. Oplevering
-
-Het eindproduct is een uitvoerbaar script dat, wanneer het wordt uitgevoerd in de Linux-partitie, een analyse uitvoert en het rapport direct in de terminal weergeeft. Optioneel kan het rapport ook naar een tekstbestand worden geschreven.
+*   **Docker Onderhoud:** Je gebruikt Docker. Voer periodiek `docker system prune` uit om ongebruikte containers, netwerken en images te verwijderen en schijfruimte vrij te maken.
+*   **Node.js Projecten:** Je `kanbanpro` project heeft een `node_modules` map van 345 MB. Overweeg `npm dedupe` uit te voeren in die map om dubbele pakketten te verminderen.
+*   **Algemeen Systeem:** Voer maandelijks `sudo apt autoremove && sudo apt clean` uit om onnodige pakketten en de pakketcache te verwijderen.
