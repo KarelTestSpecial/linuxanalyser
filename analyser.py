@@ -3,26 +3,47 @@
 import subprocess
 import os
 from datetime import datetime, timedelta
+import google.generativeai as genai
+
+# Configure the Gemini API
+try:
+    api_key = os.environ["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-flash-latest')
+except KeyError:
+    print("Error: The GEMINI_API_KEY environment variable is not set.")
+    exit(1)
+
+
+def ask_ai(prompt):
+    """
+    Sends a prompt to the AI and returns the response.
+    """
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"An error occurred while communicating with the AI: {e}"
+
 
 def analyze_installed_packages(manual_packages):
     """
-    Analyzes installed Debian packages to find their size and name.
+    Analyzes installed Debian packages to find their size, name and description.
     """
     try:
-        command = "dpkg-query -Wf '${Installed-Size}\t${Package}\t${binary:Summary}\n' | sort -n"
+        command = "dpkg-query -Wf '${Installed-Size}\t${Package}\t${Description}\n' | sort -n"
         result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
 
         packages = []
         for line in result.stdout.strip().splitlines():
             if line:
                 parts = line.split('\t')
-                if len(parts) >= 2:
-                    size_kb_str, name = parts[0], parts[1]
-                    summary = parts[2] if len(parts) > 2 else "N/A"
+                if len(parts) >= 3:
+                    size_kb_str, name, description = parts[0], parts[1], parts[2]
                     try:
                         size_kb = int(size_kb_str)
                         is_manual = name in manual_packages
-                        packages.append({"name": name, "size_kb": size_kb, "summary": summary, "manual": is_manual})
+                        packages.append({"name": name, "size_kb": size_kb, "description": description, "manual": is_manual})
                     except ValueError:
                         # This can happen if Installed-Size is not a number.
                         # In this case, we can probably ignore the package or log it.
@@ -106,56 +127,77 @@ def get_manually_installed_packages():
         return set()
 
 
-
-def generate_markdown_report(packages, node_modules, home_dir_analysis):
+def get_auto_installed_packages():
     """
-    Generates a Markdown report from the collected data.
+    Gets a set of automatically installed packages.
+    """
+    try:
+        command = "apt-mark showauto"
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
+        return set(result.stdout.strip().splitlines())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return set()
+
+
+def generate_markdown_report(manual_packages, node_modules, home_dir_analysis, ai_insights):
+    """
+    Generates a Markdown report from the collected data and AI insights.
     """
     report_lines = [
-        "# Linux Partition Analysis Report",
+        f"# Intelligent Report of your Linux Partion",
+        f"*Generated on: {datetime.now().strftime('%Y-%m-%d')}*",
         "",
-        "## Installed Software Packages",
+        "## 1. Jouw Werkplaats: Zelf Geïnstalleerde Applicaties",
         "",
-        "| Package Name | Size (MB) | Manually Installed | Summary |",
-        "|--------------|-----------|--------------------|---------|",
+        "Dit is de software die jij bewust hebt toegevoegd aan het basissysteem.",
+        "",
+        "| Applicatie | Grootte (MB) | Beschrijving |",
+        "|------------|--------------|----------------|",
     ]
 
-    for pkg in packages[:20]: # Show top 20 largest
-        size_mb = pkg['size_kb'] / 1024
-        if "children" in pkg:
-            # This is a group
-            any_manual = any(child.get("manual") for child in pkg["children"])
-            manual_str = "Yes" if any_manual else "No"
-            report_lines.append(f"| **{pkg['name']}** | **{size_mb:.2f}** | **{manual_str}** | **{pkg.get('summary', 'N/A')}** |")
-            for child_pkg in pkg["children"]:
-                child_size_mb = child_pkg['size_kb'] / 1024
-                child_manual_str = "Yes" if child_pkg.get("manual") else "No"
-                report_lines.append(f"| &nbsp;&nbsp;&nbsp;{child_pkg['name']} | {child_size_mb:.2f} | {child_manual_str} | {child_pkg.get('summary', 'N/A')} |")
-        else:
-            # This is a single package
-            manual_str = "Yes" if pkg.get("manual") else "No"
-            report_lines.append(f"| {pkg['name']} | {size_mb:.2f} | {manual_str} | {pkg.get('summary', 'N/A')} |")
+    # This part will be tricky, as we have to parse the AI's output.
+    # For now, we will just display the raw output. A more robust solution would be to parse the output
+    # and format it nicely, but for now, this will do.
+    report_lines.append(ai_insights["categorized_packages"])
+
 
     report_lines.extend([
         "",
-        "## `node_modules` Directories",
+        "---",
         "",
-        "| Path | Size (MB) | Last Modified |",
-        "|------|-----------|---------------|",
+        "## 2. Inzichten van de AI: Hoe Werkt Je Systeem?",
+        "",
+        "Hieronder legt de AI uit hoe bepaalde onderdelen van je systeem samenwerken en wat hun functie is.",
+        "",
     ])
 
-    total_size_mb = 0
-    node_modules.sort(key=lambda x: x['size_kb'], reverse=True)
-    for nm in node_modules:
-        size_mb = nm['size_kb'] / 1024
-        total_size_mb += size_mb
-        report_lines.append(f"| {nm['path']} | {size_mb:.2f} | {nm['last_modified'].strftime('%Y-%m-%d')} |")
-
-    report_lines.append(f"\n**Total size of all 'node_modules' folders:** {total_size_mb:.2f} MB")
+    report_lines.append(ai_insights["explained_packages"])
+    report_lines.append(ai_insights["explained_cryptic_packages"])
 
     report_lines.extend([
         "",
-        "## Home Directory Analysis",
+        "---",
+        "",
+        "## 3. Analyse van `node_modules`",
+        "",
+    ])
+
+    total_size_mb = sum(nm['size_kb'] for nm in node_modules) / 1024
+    report_lines.append(f"- **Totaal ingenomen ruimte:** {total_size_mb:.2f} MB")
+
+    if node_modules:
+        biggest_folder = max(node_modules, key=lambda x: x['size_kb'])
+        report_lines.append(f"- **Grootste map:** `{biggest_folder['path']}` ({biggest_folder['size_kb'] / 1024:.2f} MB)")
+
+    report_lines.append("- **Projectmappen:**")
+    for nm in node_modules:
+        report_lines.append(f"  - `{nm['path']}` ({nm['size_kb'] / 1024:.2f} MB)")
+
+    report_lines.extend([
+        "",
+        "---",
+        "",
+        "## 4. Home Directory Analysis",
         "",
         "| Directory | Purpose |",
         "|-----------|---------|",
@@ -164,70 +206,60 @@ def generate_markdown_report(packages, node_modules, home_dir_analysis):
     for dir_info in home_dir_analysis:
         report_lines.append(f"| {dir_info['name']} | {dir_info['description']} |")
 
+
     report_lines.extend([
         "",
-        "## Maintenance Recommendations",
+        "---",
         "",
-        "**Package Management:**",
-        "- Regularly run `sudo apt autoremove` and `sudo apt clean` to remove orphaned packages and clear the package cache.",
-        "- Review the list of the largest packages above. Consider removing any that you no longer use.",
+        "## 5. Gepersonaliseerde Onderhoudstips",
         "",
-        "**`node_modules` Management:**",
     ])
 
-    six_months_ago = datetime.now() - timedelta(days=180)
-    old_node_modules = [nm for nm in node_modules if nm['last_modified'] < six_months_ago]
-
-    if old_node_modules:
-        report_lines.append("- The following `node_modules` directories haven't been modified in over 6 months and might be from old projects:")
-        for nm in old_node_modules:
-            report_lines.append(f"  - `{nm['path']}`")
-
-    report_lines.append("- Consider using a tool like `npkill` to easily find and remove old or large `node_modules` directories.")
+    report_lines.append(ai_insights["recommendations"])
 
     return "\n".join(report_lines)
 
-def group_packages(packages):
-    grouped = {}
-    remaining_packages = []
-    groups_to_find = ["docker", "openjdk", "gcc", "g++", "cpp", "node", "git", "vim"]
-
-    for pkg in packages:
-        found_group = None
-        for group_name in groups_to_find:
-            if pkg["name"].startswith(group_name):
-                found_group = group_name
-                break
-        
-        if found_group:
-            if found_group not in grouped:
-                grouped[found_group] = {"name": f"{found_group} related packages", "size_kb": 0, "summary": f"Packages related to {found_group}", "children": []}
-            grouped[found_group]["size_kb"] += pkg["size_kb"]
-            grouped[found_group]["children"].append(pkg)
-        else:
-            remaining_packages.append(pkg)
-            
-    # Sort children by size
-    for group in grouped.values():
-        group['children'].sort(key=lambda x: x['size_kb'], reverse=True)
-
-    # Create a new list with the grouped packages and the remaining ones
-    new_package_list = list(grouped.values()) + remaining_packages
-    
-    # Sort the final list by size
-    new_package_list.sort(key=lambda x: x["size_kb"], reverse=True)
-    
-    return new_package_list
 
 def main():
     print("Starting Linux analysis...")
-    manual_packages = get_manually_installed_packages()
-    packages = analyze_installed_packages(manual_packages)
-    packages = group_packages(packages)
+    manual_packages_set = get_manually_installed_packages()
+    auto_packages_set = get_auto_installed_packages()
+    
+    # We pass all packages to the analysis function, and then filter them
+    all_packages = analyze_installed_packages(manual_packages_set)
+    
+    manual_packages = [p for p in all_packages if p['manual']]
+    auto_packages = [p for p in all_packages if not p['manual']]
+
     node_modules = find_node_modules()
     home_dir_analysis = analyze_home_directory()
 
-    report = generate_markdown_report(packages, node_modules, home_dir_analysis)
+    # AI Analysis
+    print("Asking AI to categorize packages...")
+    categorization_prompt = f"Here is a list of manually installed packages:\n\n{manual_packages}\n\nPlease categorize them into 'Core System & Essential Tools' and 'User-Installed Applications'."
+    categorized_packages_str = ask_ai(categorization_prompt)
+
+    print("Asking AI to explain package groups...")
+    explanation_prompt = f"Here is a list of all installed packages:\n\n{all_packages}\n\nPlease identify functional groups of packages (e.g., docker, java) and explain their relationships."
+    explained_packages_str = ask_ai(explanation_prompt)
+
+    print("Asking AI to explain cryptic packages...")
+    cryptic_packages = sorted([p for p in auto_packages if p['name'].startswith('lib')], key=lambda x: x['size_kb'], reverse=True)[:5]
+    cryptic_packages_prompt = f"Please explain in simple terms what the following packages are and why they might be installed on a development machine:\n\n{cryptic_packages}"
+    explained_cryptic_packages_str = ask_ai(cryptic_packages_prompt)
+
+    print("Asking AI for personalized recommendations...")
+    recommendations_prompt = f"Based on the following analysis, please provide personalized maintenance recommendations.\n\nPackages:\n{all_packages}\n\nnode_modules:\n{node_modules}"
+    recommendations_str = ask_ai(recommendations_prompt)
+
+    ai_insights = {
+        "categorized_packages": categorized_packages_str,
+        "explained_packages": explained_packages_str,
+        "explained_cryptic_packages": explained_cryptic_packages_str,
+        "recommendations": recommendations_str,
+    }
+
+    report = generate_markdown_report(manual_packages, node_modules, home_dir_analysis, ai_insights)
 
     print("\n--- Analysis Report ---")
     print(report)
@@ -236,7 +268,7 @@ def main():
     try:
         save_report = input("\nDo you want to save this report to a file? (y/n): ").lower()
         if save_report == 'y':
-            filename = "linux_analysis_report.md"
+            filename = "AI_linux_report.md"
             with open(filename, "w") as f:
                 f.write(report)
             print(f"Report saved to {filename}")
