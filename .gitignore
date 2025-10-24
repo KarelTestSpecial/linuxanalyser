@@ -1,1 +1,10 @@
-linux_analysis_report.md
+# Python virtual environment map
+# Deze map bevat geïnstalleerde packages en moet altijd genegeerd worden.
+
+venv/
+
+
+# Gegenereerde rapportbestanden
+# Dit zijn output-bestanden van het script met privacy-gevoelige informatie en horen niet bij de broncode.
+
+AI_linux_report.md
