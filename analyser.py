@@ -77,6 +77,31 @@ def find_node_modules():
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []
 
+
+def find_pnpm_store():
+    """
+    Finds the pnpm content-addressable store and calculates its size.
+    """
+    pnpm_store_path = os.path.expanduser("~/.pnpm-store")
+
+    if not os.path.isdir(pnpm_store_path):
+        return None
+
+    try:
+        command = f"du -sk {pnpm_store_path}"
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
+
+        if result.stdout:
+            parts = result.stdout.strip().split('\t')
+            if len(parts) == 2:
+                size_kb_str, path = parts
+                return {"path": path, "size_kb": int(size_kb_str)}
+
+        return None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
 def analyze_home_directory():
     home_dir = os.path.expanduser("~")
     dir_analysis = []
@@ -139,7 +164,7 @@ def get_auto_installed_packages():
         return set()
 
 
-def generate_markdown_report(manual_packages, node_modules, home_dir_analysis, ai_insights):
+def generate_markdown_report(manual_packages, node_modules, pnpm_store, home_dir_analysis, ai_insights):
     """
     Generates a Markdown report from the collected data and AI insights.
     """
@@ -193,6 +218,19 @@ def generate_markdown_report(manual_packages, node_modules, home_dir_analysis, a
     for nm in node_modules:
         report_lines.append(f"  - `{nm['path']}` ({nm['size_kb'] / 1024:.2f} MB)")
 
+    if pnpm_store:
+        report_lines.extend([
+            "",
+            "---",
+            "",
+            "## 3.1. Analyse van `pnpm`",
+            "",
+            "De `pnpm` package manager is gedetecteerd. In tegenstelling tot `npm` gebruikt `pnpm` een centrale opslagplaats om schijfruimte te besparen.",
+            "",
+            f"- **Locatie van de centrale opslagplaats:** `{pnpm_store['path']}`",
+            f"- **Totaal ingenomen ruimte:** {pnpm_store['size_kb'] / 1024:.2f} MB",
+        ])
+
     report_lines.extend([
         "",
         "---",
@@ -232,6 +270,7 @@ def main():
     auto_packages = [p for p in all_packages if not p['manual']]
 
     node_modules = find_node_modules()
+    pnpm_store = find_pnpm_store()
     home_dir_analysis = analyze_home_directory()
 
     # AI Analysis
@@ -249,7 +288,7 @@ def main():
     explained_cryptic_packages_str = ask_ai(cryptic_packages_prompt)
 
     print("Asking AI for personalized recommendations...")
-    recommendations_prompt = f"Based on the following analysis, please provide personalized maintenance recommendations.\n\nPackages:\n{all_packages}\n\nnode_modules:\n{node_modules}"
+    recommendations_prompt = f"Based on the following analysis, please provide personalized maintenance recommendations.\n\nPackages:\n{all_packages}\n\nnode_modules:\n{node_modules}\n\npnpm_store:\n{pnpm_store}"
     recommendations_str = ask_ai(recommendations_prompt)
 
     ai_insights = {
@@ -259,7 +298,7 @@ def main():
         "recommendations": recommendations_str,
     }
 
-    report = generate_markdown_report(manual_packages, node_modules, home_dir_analysis, ai_insights)
+    report = generate_markdown_report(manual_packages, node_modules, pnpm_store, home_dir_analysis, ai_insights)
 
     print("\n--- Analysis Report ---")
     print(report)
