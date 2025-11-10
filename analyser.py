@@ -288,7 +288,21 @@ def main():
     explained_cryptic_packages_str = ask_ai(cryptic_packages_prompt)
 
     print("Asking AI for personalized recommendations...")
-    recommendations_prompt = f"Based on the following analysis, please provide personalized maintenance recommendations.\n\nPackages:\n{all_packages}\n\nnode_modules:\n{node_modules}\n\npnpm_store:\n{pnpm_store}"
+    recommendations_prompt = f"""Based on the following analysis, please provide personalized maintenance recommendations.
+
+Packages:
+{all_packages}
+
+node_modules:
+{node_modules}
+
+pnpm_store:
+{pnpm_store}
+
+Special Instructions:
+- If you recommend Docker cleanup, advise using `docker system prune` as the safe default for removing dangling images and stopped containers.
+- Clearly explain that `docker system prune -a` is a more aggressive command that will remove ALL unused images, including images that were pulled but are not currently used by a container. Warn the user that this might remove images they want to keep.
+"""
     recommendations_str = ask_ai(recommendations_prompt)
 
     ai_insights = {
