@@ -3,11 +3,7 @@
 import subprocess
 import os
 from datetime import datetime
-from google.genai import Client
-from dotenv import load_dotenv
-
-# Laad de omgevingsvariabelen uit het .env bestand
-load_dotenv()
+from google.genai import Client  # De nieuwe, toekomstbestendige library
 
 # Configure the Gemini API met de nieuwe library
 try:
@@ -20,34 +16,20 @@ except KeyError:
     client = None
 
 
-def ask_ai(prompt, model_id='gemini-2.5-flash'):
+def ask_ai(prompt):
     """
-    Sends a prompt to the AI using the new google.genai SDK.
-    Optimized for Gemini 3.0 (Jan 2026) by handling thought signatures.
+    Sends a prompt to the AI using the new google.genai SDK and returns the response.
     """
     if client is None:
         return "AI insights not available (API Key missing)."
     try:
-        # Gemini 3.0 genereert vaak 'thought' parts voor tekstuele antwoorden.
+        # De nieuwe methode is client.models.generate_content()
         response = client.models.generate_content(
-            model=model_id, 
+            model='gemini-2.0-flash-exp', # Of 'gemini-1.5-flash' als je een oudere stabiele versie wilt
             contents=prompt
         )
-        
-        # In de 2026 SDK bevat .text de samengevoegde tekstuele output, 
-        # terwijl .candidates[0].content.parts de ruwe data (incl. thoughts) bevat.
-        if response.text:
-            return response.text
-        
-        # Fallback: check of er wel 'thought' data is maar geen tekst
-        if hasattr(response, 'candidates') and response.candidates:
-            parts = response.candidates[0].content.parts
-            thought_parts = [p.thought for p in parts if hasattr(p, 'thought') and p.thought]
-            if thought_parts:
-                return f"[AI Thought: {thought_parts[0][:100]}...] (No text output generated)"
-        
-        return "AI generated an empty response."
-            
+        # De response structuur is meestal hetzelfde (.text)
+        return response.text
     except Exception as e:
         return f"An error occurred while communicating with the AI: {e}"
 
@@ -80,49 +62,22 @@ def analyze_installed_packages(manual_packages):
 
 def find_node_modules():
     """
-    Finds all 'node_modules' directories in the user's home folder and calculates both
-    their virtual size and physical size (inode/hardlink-aware).
+    Finds all 'node_modules' directories in the user's home folder and calculates their size.
     """
     home_dir = os.path.expanduser("~")
-    node_modules_list = []
-    global_seen_inodes = set()
 
     try:
-        # Use fast C-based find to locate all top-level node_modules directories
-        command = f"find {home_dir} -type d -name 'node_modules' -prune 2>/dev/null"
+        command = f"find {home_dir} -type d -name 'node_modules' -prune -exec du -sk {{}} +"
         result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
 
-        for path in result.stdout.strip().splitlines():
-            if path and os.path.isdir(path):
-                virtual_bytes = 0
-                physical_bytes = 0
-                
-                try:
-                    # Recursively walk this specific node_modules directory
-                    for nm_root, nm_dirs, nm_files in os.walk(path):
-                        for f in nm_files:
-                            f_path = os.path.join(nm_root, f)
-                            try:
-                                stat = os.lstat(f_path)
-                                virtual_bytes += stat.st_size
-                                if stat.st_ino not in global_seen_inodes:
-                                    global_seen_inodes.add(stat.st_ino)
-                                    physical_bytes += stat.st_size
-                            except OSError:
-                                continue
-                                
-                    size_kb = virtual_bytes // 1024
-                    physical_kb = physical_bytes // 1024
+        node_modules_list = []
+        for line in result.stdout.strip().splitlines():
+            if line:
+                parts = line.split('\t')
+                if len(parts) == 2:
+                    size_kb_str, path = parts
                     last_modified = datetime.fromtimestamp(os.path.getmtime(path))
-                    
-                    node_modules_list.append({
-                        "path": path,
-                        "size_kb": size_kb,
-                        "physical_kb": physical_kb,
-                        "last_modified": last_modified
-                    })
-                except OSError:
-                    continue
+                    node_modules_list.append({"path": path, "size_kb": int(size_kb_str), "last_modified": last_modified})
 
         return node_modules_list
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -225,27 +180,19 @@ def generate_markdown_report(manual_packages, node_modules, pnpm_store, home_dir
         "",
         "## 1. Jouw Werkplaats: Zelf Geïnstalleerde Applicaties",
         "",
-        "Dit is de software die jij bewust hebt toegevoegd aan het basissysteem, gerangschikt van groot naar klein.",
+        "Dit is de software die jij bewust hebt toegevoegd aan het basissysteem.",
         "",
         "| Applicatie | Grootte (MB) | Beschrijving |",
         "|------------|--------------|----------------|",
     ]
 
-    # Generate the sorted package list table in Python
-    # manual_packages is already sorted by size_kb descending
-    for pkg in manual_packages:
-        size_mb = pkg['size_kb'] / 1024
-        # Clean description to be short (first sentence or max 80 chars)
-        desc = pkg['description'].split('.')[0] if pkg['description'] else "Geen beschrijving"
-        if len(desc) > 80:
-            desc = desc[:77] + "..."
-        report_lines.append(f"| `{pkg['name']}` | {size_mb:.2f} MB | {desc} |")
+    # This part will be tricky, as we have to parse the AI's output.
+    # For now, we will just display the raw output. A more robust solution would be to parse the output
+    # and format it nicely, but for now, this will do.
+    report_lines.append(ai_insights["categorized_packages"])
+
 
     report_lines.extend([
-        "",
-        "### 📦 AI Categorisering",
-        "",
-        ai_insights["categorized_packages"],
         "",
         "---",
         "",
@@ -267,21 +214,15 @@ def generate_markdown_report(manual_packages, node_modules, pnpm_store, home_dir
     ])
 
     total_size_mb = sum(nm['size_kb'] for nm in node_modules) / 1024
-    total_physical_mb = sum(nm['physical_kb'] for nm in node_modules) / 1024
-    report_lines.append(f"- **Totaal virtuele ruimte:** {total_size_mb:.2f} MB (zoals gerapporteerd door Node.js)")
-    report_lines.append(f"- **Totaal fysieke SSD impact:** {total_physical_mb:.2f} MB (reële schijfruimte na pnpm-hardlink ontdubbeling!)")
+    report_lines.append(f"- **Totaal ingenomen ruimte:** {total_size_mb:.2f} MB")
 
     if node_modules:
         biggest_folder = max(node_modules, key=lambda x: x['size_kb'])
-        report_lines.append(f"- **Grootste map:** `{biggest_folder['path']}` (Virtueel: {biggest_folder['size_kb'] / 1024:.2f} MB | **Fysiek: {biggest_folder['physical_kb'] / 1024:.2f} MB**)")
+        report_lines.append(f"- **Grootste map:** `{biggest_folder['path']}` ({biggest_folder['size_kb'] / 1024:.2f} MB)")
 
-    report_lines.append("- **Projectmappen (Gerangschikt van groot naar klein):**")
-    # Sort the node modules list by size_kb descending
-    sorted_node_modules = sorted(node_modules, key=lambda x: x['size_kb'], reverse=True)
-    for nm in sorted_node_modules:
-        virt_mb = nm['size_kb'] / 1024
-        phys_mb = nm['physical_kb'] / 1024
-        report_lines.append(f"  - `{nm['path']}` (Virtueel: {virt_mb:.2f} MB | **Fysiek: {phys_mb:.2f} MB**)")
+    report_lines.append("- **Projectmappen:**")
+    for nm in node_modules:
+        report_lines.append(f"  - `{nm['path']}` ({nm['size_kb'] / 1024:.2f} MB)")
 
     if pnpm_store:
         report_lines.extend([
@@ -321,7 +262,6 @@ def generate_markdown_report(manual_packages, node_modules, pnpm_store, home_dir
     report_lines.append(ai_insights["recommendations"])
 
     return "\n".join(report_lines)
-
 
 
 def main():
@@ -403,7 +343,7 @@ Special Instructions:
     if os.path.isdir(frontend_public_path):
         json_path = os.path.join(frontend_public_path, "data.json")
     else:
-        json_path = os.path.join(os.path.dirname(__file__), "data.json")
+        json_path = "data.json"
 
     with open(json_path, "w") as f:
         json.dump(data_for_frontend, f, indent=2)
@@ -418,13 +358,7 @@ Special Instructions:
     try:
         save_report = input("\nDo you want to save this report to a file? (y/n): ").lower()
         if save_report == 'y':
-            # Create the reports directory if it doesn't exist
-            reports_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "rapporten"))
-            os.makedirs(reports_dir, exist_ok=True)
-            
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = os.path.join(reports_dir, f"AI_linux_report_{timestamp}.md")
-            
+            filename = "AI_linux_report.md"
             with open(filename, "w") as f:
                 f.write(report)
             print(f"Report saved to {filename}")
@@ -433,4 +367,3 @@ Special Instructions:
 
 if __name__ == "__main__":
     main()
-  

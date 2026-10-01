@@ -1,0 +1,26 @@
+# PROJECT RULES & CONTEXT
+# Leest dit altijd voordat je actie onderneemt.
+
+## 1. Hardware Constraints (CRITICAL)
+- **System:** Acer Chromebook / Linux Container (Crostini).
+- **OS:** Debian GNU/Linux 12 (bookworm).
+- **Specs:** Intel Celeron N4020 (Low power), 4GB RAM.
+- **Performance:** Vermijd zware achtergrondprocessen. Start geen zware dev-servers tenzij expliciet gevraagd.
+- **Storage:** 20GB limit. Wees zuinig met schijfruimte.
+
+## 2. Python Workflow
+- **Command:** ALTIJD `python3` (nooit `python`).
+- **Environment:** Dit systeem forceert PEP 668. Installeer NOOIT packages globaal.
+- **Venv:** Er is een actieve `venv` in de map `./venv`.
+  - Gebruik packages via: `./venv/bin/python3`
+  - Of installeer via: `./venv/bin/pip install ...`
+  - Activeer indien nodig: `source venv/bin/activate`
+
+## 3. Node.js / Frontend Workflow
+- **Package Manager:** GEBRUIK ALLEEN `pnpm`. (Geen `npm` of `yarn` gebruiken om schijfruimte te besparen).
+- **Frameworks:** Kies voor lichtgewicht oplossingen (Vite, Preact/React) zonder onnodige dependencies.
+
+## 4. Output Style
+- Schrijf code die modulair en leesbaar is.
+- Voeg comments toe in het Nederlands of Engels.
+- Controleer altijd eerst of een bestand bestaat voordat je het overschrijft.

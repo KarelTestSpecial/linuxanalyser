@@ -1,68 +1,49 @@
-# Linux Partitie Analyser
+# Linux Analyzer
 
-Dit script analyseert de Crostini Linux-omgeving op een Chromebook. Het inventariseert handmatig geïnstalleerde Debian-pakketten, `node_modules`-mappen en de home-directory. Vervolgens wordt de Google Gemini API gebruikt om intelligente inzichten, samenvattingen en gepersonaliseerde onderhoudstips te genereren.
+Een intelligente tool om je Linux-systeem te analyseren en te optimaliseren met behulp van Google Gemini AI. Deze tool is volledig voorbereid op de Gemini 3.0 (Januari 2026) standaarden, inclusief ondersteuning voor thought signatures.
 
-## Vereisten
+## Features
+- Scant handmatig geïnstalleerde pakketten en hun grootte.
+- Analyseert `node_modules` en de `pnpm` store.
+- Gebruikt Gemini AI voor categorisatie en uitleg van cryptische pakketten.
+- Genereert een uitgebreid Markdown rapport met onderhoudstips.
+- Slaat rapporten op met een timestamp in de map `../rapporten/`.
+- Interactieve frontend voor het bekijken van de verzamelde data.
 
-Voordat je begint, zorg ervoor dat je de volgende zaken hebt:
+## Installatie
 
-*   Een werkende Linux-omgeving (getest op Crostini voor ChromeOS).
-*   Python 3 en `pip` geïnstalleerd.
-*   Git geïnstalleerd.
-*   Een Google Gemini API-sleutel. Je kunt er een aanmaken via [Google AI Studio](https://aistudio.google.com/).
-
-## Installatie & Configuratie
-
-Volg deze stappen om het project op te zetten:
-
-1.  **Kloon de repository** (als je dat nog niet hebt gedaan):
-    ```bash
-    git clone <url-van-jouw-repository>
-    cd <naam-van-de-repository>
-    ```
-
-2.  **Maak een Python virtual environment aan:**
-    Dit zorgt ervoor dat de benodigde packages geïsoleerd blijven van je systeem.
-    ```bash
-    python3 -m venv venv
-    ```
-
-3.  **Activeer de virtual environment:**
-    Je moet dit elke keer doen als je in een nieuwe terminal aan het project werkt.
-    ```bash
-    source venv/bin/activate
-    ```
-    *(Je terminalprompt zou nu `(venv)` moeten tonen.)*
-
-4.  **Installeer de benodigde Python-bibliotheken:**
-    ```bash
-    python3 -m pip install google-generativeai
-    ```
+1. **Clone de repository**
+2. **Setup de virtuele omgeving:**
+   ```bash
+   python3 -m venv myenv
+   source myenv/bin/activate
+   pip install -r requirements.txt
+   ```
+3. **Configureer de API Key:**
+   Maak een `.env` bestand aan in de hoofdmap:
+   ```bash
+   GEMINI_API_KEY=jouw_api_sleutel_hier
+   ```
+   *Noot: De `.env` is toegevoegd aan `.gitignore` voor jouw veiligheid.*
 
 ## Gebruik
 
-Voer de volgende stappen uit om het script te draaien:
+### Analyse uitvoeren:
+```bash
+./myenv/bin/python3 analyser.py
+```
+Na de analyse kun je ervoor kiezen om het rapport op te slaan. Dit wordt geplaatst in de map `rapporten/` met een timestamp.
 
-1.  **Zorg ervoor dat je virtual environment actief is:**
-    ```bash
-    source venv/bin/activate
-    ```
+### Frontend bekijken:
+1. Zorg dat je de analyse hebt uitgevoerd (dit genereert `frontend/public/data.json`).
+2. Navigeer naar de `frontend` map.
+3. Start de dev server:
+   ```bash
+   pnpm install
+   pnpm dev
+   ```
 
-2.  **Stel je API-sleutel in als een environment variable.**
-    Het script leest de sleutel veilig uit je omgeving. Deze stap moet je voor elke nieuwe terminalsessie herhalen.
-    ```bash
-    # Vervang "JOUW_API_SLEUTEL_HIER" door je daadwerkelijke sleutel
-    export GEMINI_API_KEY="JOUW_API_SLEUTEL_HIER"
-    ```
-    **Belangrijk:** Zet je API-sleutel nooit direct in het script of deel deze publiekelijk!
-
-3.  **Voer het analyser-script uit:**
-    ```bash
-    python3 analyser.py
-    ```
-
-## Wat je kunt verwachten
-
-Het script zal de analyse uitvoeren en de verschillende AI-prompts versturen. Dit kan even duren.
-
-Na afloop wordt een volledig rapport in Markdown-formaat direct in de terminal geprint. Vervolgens krijg je de vraag of je dit rapport wilt opslaan in een bestand met de naam `AI_linux_report.md`.
+## Systeemvereisten
+- Geoptimaliseerd voor systemen met beperkt RAM (zoals Chromebooks met 4GB RAM).
+- Python 3.11+
+- Node.js & pnpm (voor de frontend)

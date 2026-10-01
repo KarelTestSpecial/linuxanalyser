@@ -2,9 +2,17 @@
 # Deze map bevat geïnstalleerde packages en moet altijd genegeerd worden.
 
 venv/
+.venv/
+myenv/
 
 
 # Gegenereerde rapportbestanden
 # Dit zijn output-bestanden van het script met privacy-gevoelige informatie en horen niet bij de broncode.
 
 AI_linux_report.md
+
+
+# Lokaal secrets-bestand (bevat GEMINI_API_KEY)
+# Kopie staat in ~/.config/maccha/secrets/linuxanalyser.env
+
+.env
