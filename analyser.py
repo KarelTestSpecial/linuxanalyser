@@ -2,6 +2,7 @@
 
 import subprocess
 import os
+import time
 from datetime import datetime
 from google.genai import Client
 from dotenv import load_dotenv
@@ -20,36 +21,46 @@ except KeyError:
     client = None
 
 
-def ask_ai(prompt, model_id='gemini-3.8-flash'):
+def ask_ai(prompt, model_id='gemini-3.8-flash', max_retries=3):
     """
     Sends a prompt to the AI using the new google.genai SDK.
-    Optimized for Gemini 3.0 (Jan 2026) by handling thought signatures.
+    Retries on 429 (free-tier per-minute quota) with increasing backoff.
     """
     if client is None:
         return "AI insights not available (API Key missing)."
-    try:
-        # Gemini 3.0 genereert vaak 'thought' parts voor tekstuele antwoorden.
-        response = client.models.generate_content(
-            model=model_id, 
-            contents=prompt
-        )
-        
-        # In de 2026 SDK bevat .text de samengevoegde tekstuele output, 
-        # terwijl .candidates[0].content.parts de ruwe data (incl. thoughts) bevat.
-        if response.text:
-            return response.text
-        
-        # Fallback: check of er wel 'thought' data is maar geen tekst
-        if hasattr(response, 'candidates') and response.candidates:
-            parts = response.candidates[0].content.parts
-            thought_parts = [p.thought for p in parts if hasattr(p, 'thought') and p.thought]
-            if thought_parts:
-                return f"[AI Thought: {thought_parts[0][:100]}...] (No text output generated)"
-        
-        return "AI generated an empty response."
-            
-    except Exception as e:
-        return f"An error occurred while communicating with the AI: {e}"
+
+    for attempt in range(max_retries):
+        try:
+            # Gemini 3.0 genereert vaak 'thought' parts voor tekstuele antwoorden.
+            response = client.models.generate_content(
+                model=model_id,
+                contents=prompt
+            )
+
+            # In de 2026 SDK bevat .text de samengevoegde tekstuele output,
+            # terwijl .candidates[0].content.parts de ruwe data (incl. thoughts) bevat.
+            if response.text:
+                return response.text
+
+            # Fallback: check of er wel 'thought' data is maar geen tekst
+            if hasattr(response, 'candidates') and response.candidates:
+                parts = response.candidates[0].content.parts
+                thought_parts = [p.thought for p in parts if hasattr(p, 'thought') and p.thought]
+                if thought_parts:
+                    return f"[AI Thought: {thought_parts[0][:100]}...] (No text output generated)"
+
+            return "AI generated an empty response."
+
+        except Exception as e:
+            if '429' in str(e) and attempt < max_retries - 1:
+                wait = 45 * (attempt + 1)
+                print(f"  Quota (429) bereikt — wacht {wait}s en probeer opnieuw "
+                      f"({attempt + 1}/{max_retries - 1})...")
+                time.sleep(wait)
+                continue
+            return f"An error occurred while communicating with the AI: {e}"
+
+    return "An error occurred while communicating with the AI: quota retries exhausted."
 
 
 def analyze_installed_packages(manual_packages):
@@ -180,15 +191,32 @@ def analyze_home_directory():
         full_path = os.path.join(home_dir, item)
         if os.path.isdir(full_path):
             description = known_dirs.get(item, "Unknown purpose.")
-            
+
             # Add more specific checks
             if os.path.exists(os.path.join(full_path, ".git")):
                 description += " This directory is a Git repository."
             if os.path.exists(os.path.join(full_path, "package.json")):
                 description += " This directory appears to be a Node.js project."
 
-            dir_analysis.append({"name": item, "description": description})
-            
+            # Grootte bepalen (du -sk: snel, C-gebaseerd) zodat grote mappen
+            # niet meer opvallen als "Unknown purpose"
+            size_kb = 0
+            try:
+                r = subprocess.run(["du", "-sk", full_path],
+                                   capture_output=True, text=True, timeout=300)
+                if r.returncode == 0:
+                    size_kb = int(r.stdout.split()[0])
+            except (subprocess.SubprocessError, ValueError, FileNotFoundError):
+                pass
+
+            dir_analysis.append({
+                "name": item,
+                "description": description,
+                "size_kb": size_kb,
+            })
+
+    # Groot naar klein zodat de zware mappen bovenaan staan
+    dir_analysis.sort(key=lambda d: d.get("size_kb", 0), reverse=True)
     return dir_analysis
 
 def get_manually_installed_packages():
@@ -300,14 +328,19 @@ def generate_markdown_report(manual_packages, node_modules, pnpm_store, home_dir
         "",
         "---",
         "",
-        "## 4. Home Directory Analysis",
+        "## 4. Home Directory Analysis (groot naar klein)",
         "",
-        "| Directory | Purpose |",
-        "|-----------|---------|",
+        "| Directory | Grootte | Purpose |",
+        "|-----------|---------|---------|",
     ])
 
     for dir_info in home_dir_analysis:
-        report_lines.append(f"| {dir_info['name']} | {dir_info['description']} |")
+        size_mb = dir_info.get("size_kb", 0) / 1024
+        if size_mb >= 1024:
+            size_str = f"{size_mb / 1024:.2f} GB"
+        else:
+            size_str = f"{size_mb:.1f} MB"
+        report_lines.append(f"| {dir_info['name']} | {size_str} | {dir_info['description']} |")
 
 
     report_lines.extend([
