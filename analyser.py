@@ -20,7 +20,7 @@ except KeyError:
     client = None
 
 
-def ask_ai(prompt, model_id='gemini-2.5-flash'):
+def ask_ai(prompt, model_id='gemini-3.8-flash'):
     """
     Sends a prompt to the AI using the new google.genai SDK.
     Optimized for Gemini 3.0 (Jan 2026) by handling thought signatures.
